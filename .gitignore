@@ -1,0 +1,51 @@
+# Secrets
+.env
+*.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+.venv/
+
+# Conda
+*.conda
+
+# Docker
+docker-compose.override.yml
+
+# Unity
+unity/ShopMR-Unity/Library/
+unity/ShopMR-Unity/Temp/
+unity/ShopMR-Unity/Obj/
+unity/ShopMR-Unity/Build/
+unity/ShopMR-Unity/Builds/
+unity/ShopMR-Unity/Logs/
+unity/ShopMR-Unity/UserSettings/
+unity/ShopMR-Unity/MemoryCaptures/
+unity/ShopMR-Unity/Recordings/
+*.apk
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# AWS
+*.pem
+
+# MLflow
+mlruns/
+mlartifacts/
