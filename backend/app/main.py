@@ -13,7 +13,7 @@ from sqlalchemy import text
 from app.config import get_settings
 from app.models.database import engine, get_db, create_all_tables, SessionLocal
 from app.models.schemas import HealthResponse
-from app.routers import sessions, events, recommendations, chat, dashboard
+from app.routers import sessions, events, recommendations, chat, dashboard, products
 
 settings = get_settings()
 
@@ -83,6 +83,12 @@ app = FastAPI(
     docs_url="/docs",       # Swagger UI
     redoc_url="/redoc",     # ReDoc
     openapi_url="/openapi.json",
+)
+
+app.include_router(
+    products.router,
+    prefix="/api/products",
+    tags=["Products"],
 )
 
 
