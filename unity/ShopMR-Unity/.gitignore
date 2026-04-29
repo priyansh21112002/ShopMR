@@ -17,3 +17,6 @@
 *.apk
 *.aab
 *.unitypackage
+/.utmp/
+/ShopMR_BurstDebugInformation_DoNotShip/
+mono_crash.*
