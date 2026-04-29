@@ -20,3 +20,8 @@
 /.utmp/
 /ShopMR_BurstDebugInformation_DoNotShip/
 mono_crash.*
+
+# Build artifacts that shouldn't be tracked
+/.utmp/
+/ShopMR_BurstDebugInformation_DoNotShip/
+mono_crash.*
