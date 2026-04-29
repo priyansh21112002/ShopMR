@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -10,8 +12,13 @@ namespace ShopMR.Networking
         public static APIClient Instance { get; private set; }
 
         [Header("Backend Configuration")]
-        [Tooltip("Your Mac's local IP + port, e.g. http://192.168.1.42:8000")]
-        [SerializeField] private string baseUrl = "http://REPLACE_WITH_YOUR_IP:8000";
+        [Tooltip("Default backend URL. Can be overridden at runtime via debug menu.")]
+        [SerializeField] private string defaultBaseUrl = "http://10.181.182.134:8000";
+
+        private const string PREF_KEY_BASE_URL = "ShopMR_BaseUrl";
+        public string BaseUrl { get; private set; }
+
+        public event Action<string> OnBaseUrlChanged;
 
         private void Awake()
         {
@@ -22,112 +29,116 @@ namespace ShopMR.Networking
             }
             Instance = this;
             DontDestroyOnLoad(gameObject);
+
+            // Load saved URL or use default
+            BaseUrl = PlayerPrefs.GetString(PREF_KEY_BASE_URL, defaultBaseUrl);
+            Debug.Log($"[APIClient] Base URL: {BaseUrl}");
         }
 
-        // ─── Generic HTTP ────────────────────────────────
-
-        private async Task<string> GetRaw(string endpoint)
+        public void SetBaseUrl(string newUrl)
         {
-            string url = $"{baseUrl}{endpoint}";
-            Debug.Log($"[API] GET {url}");
+            if (string.IsNullOrWhiteSpace(newUrl)) return;
+            newUrl = newUrl.TrimEnd('/');
+            BaseUrl = newUrl;
+            PlayerPrefs.SetString(PREF_KEY_BASE_URL, newUrl);
+            PlayerPrefs.Save();
+            Debug.Log($"[APIClient] Base URL changed to: {newUrl}");
+            OnBaseUrlChanged?.Invoke(newUrl);
+        }
 
-            using (UnityWebRequest request = UnityWebRequest.Get(url))
+        public void ResetBaseUrl()
+        {
+            SetBaseUrl(defaultBaseUrl);
+        }
+
+        // ---------- Generic HTTP ----------
+
+        public async Task<string> GetRaw(string endpoint)
+        {
+            string url = BaseUrl + endpoint;
+            using (UnityWebRequest req = UnityWebRequest.Get(url))
             {
-                var op = request.SendWebRequest();
+                req.timeout = 15;
+                var op = req.SendWebRequest();
                 while (!op.isDone) await Task.Yield();
 
-                if (request.result != UnityWebRequest.Result.Success)
+                if (req.result != UnityWebRequest.Result.Success)
                 {
-                    Debug.LogError($"[API] GET failed: {request.error}");
+                    Debug.LogError($"[APIClient] GET {url} failed: {req.error} | {req.downloadHandler.text}");
                     return null;
                 }
-
-                return request.downloadHandler.text;
+                return req.downloadHandler.text;
             }
         }
 
-        private async Task<string> PostRaw(string endpoint, string jsonBody)
+        public async Task<string> PostRaw(string endpoint, string jsonBody)
         {
-            string url = $"{baseUrl}{endpoint}";
-            Debug.Log($"[API] POST {url}");
-
-            using (UnityWebRequest request = new UnityWebRequest(url, "POST"))
+            string url = BaseUrl + endpoint;
+            using (UnityWebRequest req = new UnityWebRequest(url, "POST"))
             {
-                byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonBody);
-                request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-                request.downloadHandler = new DownloadHandlerBuffer();
-                request.SetRequestHeader("Content-Type", "application/json");
+                byte[] body = Encoding.UTF8.GetBytes(jsonBody ?? "{}");
+                req.uploadHandler = new UploadHandlerRaw(body);
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.timeout = 15;
 
-                var op = request.SendWebRequest();
+                var op = req.SendWebRequest();
                 while (!op.isDone) await Task.Yield();
 
-                if (request.result != UnityWebRequest.Result.Success)
+                if (req.result != UnityWebRequest.Result.Success)
                 {
-                    Debug.LogError($"[API] POST failed: {request.error} | {request.downloadHandler.text}");
+                    Debug.LogError($"[APIClient] POST {url} failed: {req.error} | {req.downloadHandler.text}");
                     return null;
                 }
-
-                return request.downloadHandler.text;
+                return req.downloadHandler.text;
             }
         }
 
-        // ─── Session ─────────────────────────────────────
+        // ---------- API Methods ----------
 
         public async Task<SessionStartResponse> StartSession(string deviceId = null)
         {
-            var req = new SessionStartRequest
-            {
-                device_id = deviceId ?? SystemInfo.deviceUniqueIdentifier
-            };
-            string json = await PostRaw("/api/sessions/start", JsonUtility.ToJson(req));
-            if (json == null) return null;
-            return JsonUtility.FromJson<SessionStartResponse>(json);
+            var req = new SessionStartRequest { device_id = deviceId };
+            string body = JsonUtility.ToJson(req);
+            string resp = await PostRaw("/api/sessions/start", body);
+            return resp != null ? JsonUtility.FromJson<SessionStartResponse>(resp) : null;
         }
 
         public async Task<SessionEndResponse> EndSession(string sessionId)
         {
             var req = new SessionEndRequest { session_id = sessionId };
-            string json = await PostRaw("/api/sessions/end", JsonUtility.ToJson(req));
-            if (json == null) return null;
-            return JsonUtility.FromJson<SessionEndResponse>(json);
+            string body = JsonUtility.ToJson(req);
+            string resp = await PostRaw("/api/sessions/end", body);
+            return resp != null ? JsonUtility.FromJson<SessionEndResponse>(resp) : null;
         }
 
-        // ─── Products ────────────────────────────────────
-
-        public async Task<ProductListResponse> GetProducts(string category = null, int limit = 20)
+        public async Task<ProductListResponse> GetProducts(string category = null, int limit = 50)
         {
-            string endpoint = $"/api/products/?limit={limit}";
-            if (!string.IsNullOrEmpty(category))
-                endpoint += $"&category={category}";
-            string json = await GetRaw(endpoint);
-            if (json == null) return null;
-            return JsonUtility.FromJson<ProductListResponse>(json);
+            string ep = $"/api/products/?limit={limit}";
+            if (!string.IsNullOrEmpty(category)) ep += $"&category={UnityWebRequest.EscapeURL(category)}";
+            string resp = await GetRaw(ep);
+            return resp != null ? JsonUtility.FromJson<ProductListResponse>(resp) : null;
         }
 
         public async Task<ProductData> GetProduct(string productId)
         {
-            string json = await GetRaw($"/api/products/{productId}");
-            if (json == null) return null;
-            return JsonUtility.FromJson<ProductData>(json);
+            string resp = await GetRaw($"/api/products/{productId}");
+            return resp != null ? JsonUtility.FromJson<ProductData>(resp) : null;
         }
-
-        // ─── Events ──────────────────────────────────────
 
         public async Task TrackEvent(string sessionId, string eventType, string productId = null)
         {
-            var evt = new EventSingleJson
+            var ev = new EventSingleJson
             {
                 session_id = sessionId,
                 event_type = eventType,
                 product_id = productId
             };
-            await PostRaw("/api/events/single", JsonUtility.ToJson(evt));
+            string body = JsonUtility.ToJson(ev);
+            await PostRaw("/api/events/single", body);
         }
 
-        // ─── Recommendations ─────────────────────────────
-
-        public async Task<RecommendationResponse> GetRecommendations(
-            string sessionId, string currentProductId = null, int limit = 6)
+        public async Task<RecommendationResponse> GetRecommendations(string sessionId, string currentProductId = null, int limit = 6)
         {
             var req = new RecommendationRequest
             {
@@ -135,25 +146,22 @@ namespace ShopMR.Networking
                 current_product_id = currentProductId,
                 limit = limit
             };
-            string json = await PostRaw("/api/recommendations/get", JsonUtility.ToJson(req));
-            if (json == null) return null;
-            return JsonUtility.FromJson<RecommendationResponse>(json);
+            string body = JsonUtility.ToJson(req);
+            string resp = await PostRaw("/api/recommendations/get", body);
+            return resp != null ? JsonUtility.FromJson<RecommendationResponse>(resp) : null;
         }
 
-        // ─── Chat ────────────────────────────────────────
-
-        public async Task<ChatResponse> SendChatMessage(
-            string sessionId, string message, ChatMessageData[] history = null)
+        public async Task<ChatResponse> SendChatMessage(string sessionId, string message, List<ChatMessageData> history = null)
         {
             var req = new ChatRequest
             {
                 session_id = sessionId,
                 message = message,
-                conversation_history = history
+                conversation_history = history?.ToArray()
             };
-            string json = await PostRaw("/api/chat/message", JsonUtility.ToJson(req));
-            if (json == null) return null;
-            return JsonUtility.FromJson<ChatResponse>(json);
+            string body = JsonUtility.ToJson(req);
+            string resp = await PostRaw("/api/chat/message", body);
+            return resp != null ? JsonUtility.FromJson<ChatResponse>(resp) : null;
         }
     }
 }

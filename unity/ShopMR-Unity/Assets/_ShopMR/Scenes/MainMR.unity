@@ -482,6 +482,8 @@ GameObject:
   - component: {fileID: 651895504}
   - component: {fileID: 651895503}
   - component: {fileID: 651895502}
+  - component: {fileID: 651895506}
+  - component: {fileID: 651895507}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -526,7 +528,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 87bf2145adeb34153bc38e7918749517, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  baseUrl: http://10.181.182.134:8000
+  defaultBaseUrl: http://10.181.182.134:8000
 --- !u!4 &651895505
 Transform:
   m_ObjectHideFlags: 0
@@ -542,6 +544,34 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &651895506
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 651895501}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f442750cab9b44dc9ee693ea22a7da2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  startOpen: 1
+  pcToggleKey: 282
+--- !u!114 &651895507
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 651895501}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b1a7942723c85488d91358299a18c35c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  autoFetchOnSessionStart: 1
+  fetchLimit: 50
 --- !u!1 &751396743
 GameObject:
   m_ObjectHideFlags: 0
