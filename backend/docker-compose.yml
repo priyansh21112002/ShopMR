@@ -64,8 +64,25 @@ services:
       timeout: 10s
       retries: 3
 
+  dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    container_name: shopmr-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - MLFLOW_URL=http://localhost:5050
+      - REFRESH_SECONDS=10
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     driver: local
   mlflow_data:
     driver: local
+
