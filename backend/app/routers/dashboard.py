@@ -42,7 +42,7 @@ def _two_proportion_ztest(x1: int, n1: int, x2: int, n2: int) -> tuple[float, fl
     if se == 0:
         return 0.0, 1.0
     z = (p2 - p1) / se
-    p = 2 * (1 - stats.norm.cdf(abs(z)))
+    p = 2 * stats.norm.sf(abs(z))
     return float(z), float(p)
 
 

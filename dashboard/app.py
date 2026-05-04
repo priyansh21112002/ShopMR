@@ -57,6 +57,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ---------- Helpers ----------
+
+def fmt_pvalue(p):
+    """Format a p-value for display, handling tiny floats gracefully."""
+    if p is None:
+        return "n/a"
+    if p == 0:
+        return "≈ 0 (underflow)"
+    if p < 1e-10:
+        return f"{p:.2e} (≈ 0)"
+    if p < 0.0001:
+        return f"{p:.2e}"
+    return f"{p:.4f}"
+
+
 # ---------- Data fetchers ----------
 
 @st.cache_data(ttl=REFRESH_SECONDS)
@@ -160,16 +175,17 @@ if ab is None:
 else:
     # Winner banner
     p_val = ab.get("p_value")
+    p_str = fmt_pvalue(p_val)
+
     if ab.get("is_significant") and ab.get("winner"):
         winner = ab["winner"]
         css_class = f"winner-{winner}"
         st.markdown(
             f'<span class="winner-badge {css_class}">🏆 Winner: {winner.upper()}</span>'
-            f'&nbsp;&nbsp;<small>p-value = {p_val:.4g}</small>',
+            f'&nbsp;&nbsp;<small>p-value = {p_str}</small>',
             unsafe_allow_html=True,
         )
     else:
-        p_str = f"{p_val:.4g}" if p_val is not None else "n/a"
         st.markdown(
             f'<span class="winner-badge not-significant">No significant winner yet</span>'
             f'&nbsp;&nbsp;<small>p-value = {p_str}</small>',

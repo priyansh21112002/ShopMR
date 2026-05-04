@@ -103,7 +103,7 @@ def two_proportion_ztest(x1: int, n1: int, x2: int, n2: int):
     if se == 0:
         return 0.0, 1.0, 0.0
     z = (p2 - p1) / se
-    p_value = 2 * (1 - stats.norm.cdf(abs(z)))
+    p_value = 2 * stats.norm.sf(abs(z))
     lift = (p2 - p1) / p1 * 100 if p1 > 0 else 0.0
     return float(z), float(p_value), float(lift)
 
