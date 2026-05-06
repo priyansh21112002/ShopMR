@@ -15,6 +15,8 @@ namespace ShopMR.Catalog
     /// </summary>
     public class CatalogPanelController : MonoBehaviour
     {
+        public static CatalogPanelController Instance { get; private set; }
+
         [Header("Panel Root")]
         [Tooltip("The root GameObject to show/hide. Should be a child world-space Canvas.")]
         [SerializeField] private GameObject panelRoot;
@@ -36,7 +38,7 @@ namespace ShopMR.Catalog
         [Header("Positioning")]
         [Tooltip("Camera the panel positions itself in front of when shown. Auto-detected if null.")]
         [SerializeField] private Transform headTransform;
-        [SerializeField] private float spawnDistance = 1.5f;
+        [SerializeField] private float spawnDistance = 0.8f;
         [SerializeField] private float verticalOffset = -0.1f;
 
         [Header("Toggle Input")]
@@ -50,10 +52,24 @@ namespace ShopMR.Catalog
         private readonly List<Button> spawnedCategoryButtons = new List<Button>();
         private string activeCategory = null; // null = "All"
 
-        public bool IsVisible => panelRoot != null && panelRoot.activeSelf;
+        // CanvasGroup used for hide/show so that this script's Update() keeps running
+        private CanvasGroup canvasGroup;
+
+        public bool IsVisible => canvasGroup != null && canvasGroup.alpha > 0f;
 
         /// <summary>Fired when the user taps a product card.</summary>
         public event Action<ProductData> OnProductSelected;
+
+        private void Awake()
+        {
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+            Instance = this;
+
+            // Ensure a CanvasGroup exists for non-destructive show/hide
+            canvasGroup = GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+        }
 
         private void Start()
         {
@@ -83,40 +99,116 @@ namespace ShopMR.Catalog
                 CatalogManager.Instance.OnCatalogLoaded -= HandleCatalogLoaded;
         }
 
+        // Debounce to prevent rapid toggling
+        private float lastToggleTime;
+        private const float TOGGLE_COOLDOWN = 0.4f;
+
         private void Update()
         {
             // PC toggle
             if (Input.GetKeyDown(pcToggleKey))
                 Toggle();
 
-            // Quest right A button toggle (Joystick button 0 maps to A on most setups)
+            // Quest A button toggle via OVRInput (most reliable) + legacy fallback
             #if !UNITY_EDITOR
-            if (Input.GetKeyDown(KeyCode.JoystickButton0))
+            bool questA = false;
+            try { questA = OVRInput.GetDown(OVRInput.Button.One); } catch { }
+            if (!questA) questA = Input.GetKeyDown(KeyCode.JoystickButton0);
+            if (questA && Time.time - lastToggleTime > TOGGLE_COOLDOWN)
                 Toggle();
             #endif
+
+            #if UNITY_EDITOR
+            // Editor: number keys 1-9,0 select visible product cards directly
+            // (bypasses UI event system which Meta ISDK can block)
+            if (IsVisible)
+                HandleEditorNumberKeySelection();
+
+            // Editor: physics-raycast click on card BoxColliders
+            if (IsVisible && Input.GetMouseButtonDown(0))
+                HandleEditorMouseClick();
+            #endif
         }
+
+        #if UNITY_EDITOR
+        private void HandleEditorNumberKeySelection()
+        {
+            int index = -1;
+            if (Input.GetKeyDown(KeyCode.Alpha1)) index = 0;
+            else if (Input.GetKeyDown(KeyCode.Alpha2)) index = 1;
+            else if (Input.GetKeyDown(KeyCode.Alpha3)) index = 2;
+            else if (Input.GetKeyDown(KeyCode.Alpha4)) index = 3;
+            else if (Input.GetKeyDown(KeyCode.Alpha5)) index = 4;
+            else if (Input.GetKeyDown(KeyCode.Alpha6)) index = 5;
+            else if (Input.GetKeyDown(KeyCode.Alpha7)) index = 6;
+            else if (Input.GetKeyDown(KeyCode.Alpha8)) index = 7;
+            else if (Input.GetKeyDown(KeyCode.Alpha9)) index = 8;
+            else if (Input.GetKeyDown(KeyCode.Alpha0)) index = 9;
+
+            if (index >= 0 && index < spawnedCards.Count)
+            {
+                var card = spawnedCards[index];
+                if (card != null && card.Product != null)
+                {
+                    Debug.Log($"[CatalogPanel] Editor key-select #{index + 1}: {card.Product.name}");
+                    HandleCardSelected(card.Product);
+                }
+            }
+        }
+
+        private void HandleEditorMouseClick()
+        {
+            if (Camera.main == null) return;
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (Physics.Raycast(ray, out RaycastHit hit, 10f))
+            {
+                // Check if we hit a ProductCardUI's BoxCollider
+                var cardUI = hit.collider.GetComponent<ProductCardUI>();
+                if (cardUI != null && cardUI.Product != null)
+                {
+                    Debug.Log($"[CatalogPanel] Editor mouse-click on: {cardUI.Product.name}");
+                    HandleCardSelected(cardUI.Product);
+                }
+            }
+        }
+        #endif
 
         // ---------- Visibility ----------
 
         public void Toggle()
         {
+            lastToggleTime = Time.time;
             if (IsVisible) Hide();
             else Show();
         }
 
         public void Show()
         {
-            if (panelRoot == null) return;
+            if (canvasGroup == null) return;
             PositionInFrontOfHead();
-            panelRoot.SetActive(true);
+            canvasGroup.alpha = 1f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
+            // Re-enable physics collider so ISDK interactions work
+            SetCollidersEnabled(true);
             Debug.Log("[CatalogPanel] Shown");
         }
 
         public void Hide()
         {
-            if (panelRoot == null) return;
-            panelRoot.SetActive(false);
+            if (canvasGroup == null) return;
+            canvasGroup.alpha = 0f;
+            canvasGroup.interactable = false;
+            canvasGroup.blocksRaycasts = false;
+            // Disable physics collider so placement raycasts pass through
+            SetCollidersEnabled(false);
             Debug.Log("[CatalogPanel] Hidden");
+        }
+
+        private void SetCollidersEnabled(bool enabled)
+        {
+            foreach (var col in GetComponentsInChildren<Collider>(true))
+                col.enabled = enabled;
         }
 
         private void PositionInFrontOfHead()
@@ -131,8 +223,12 @@ namespace ShopMR.Catalog
 
             Vector3 pos = headTransform.position + fwd * spawnDistance;
             pos.y = headTransform.position.y + verticalOffset;
-            transform.position = pos;
-            transform.rotation = Quaternion.LookRotation(fwd, Vector3.up);
+
+            // Move the Canvas root (parent), not this child panel,
+            // because this panel uses stretch anchors inside the canvas.
+            Transform canvasRoot = transform.parent != null ? transform.parent : transform;
+            canvasRoot.position = pos;
+            canvasRoot.rotation = Quaternion.LookRotation(fwd, Vector3.up);
         }
 
         // ---------- Catalog data binding ----------
@@ -141,7 +237,12 @@ namespace ShopMR.Catalog
         {
             if (!success)
             {
-                if (statusText != null) statusText.text = "Failed to load catalog.";
+                if (statusText != null) statusText.text = "Backend not connected. Start the server to browse catalog.";
+                // Clear any previously spawned cards
+                foreach (var c in spawnedCards) if (c != null) Destroy(c.gameObject);
+                spawnedCards.Clear();
+                foreach (var b in spawnedCategoryButtons) if (b != null) Destroy(b.gameObject);
+                spawnedCategoryButtons.Clear();
                 return;
             }
 
@@ -203,6 +304,14 @@ namespace ShopMR.Catalog
                 string filterLabel = string.IsNullOrEmpty(activeCategory) ? "all" : activeCategory;
                 statusText.text = $"Showing {spawnedCards.Count} {filterLabel} item(s)";
             }
+
+            Debug.Log($"[CatalogPanel] RefreshCards: spawned {spawnedCards.Count} cards into {(cardContainer != null ? cardContainer.name : "null")}");
+            #if UNITY_EDITOR
+            if (spawnedCards.Count > 0)
+            {
+                Debug.Log("[CatalogPanel] Editor tip: Press 1-9 to select a product directly while catalog is open");
+            }
+            #endif
         }
 
         private void HandleCardSelected(ProductData product)
