@@ -49,5 +49,13 @@ namespace ShopMR.Core
                 SessionManager.Instance.SessionId, "recommend_click", productId);
             Debug.Log($"[Event] recommend_click: {productId}");
         }
+
+        public async void TrackChatMessage(string productId)
+        {
+            if (!SessionManager.Instance.IsSessionActive) return;
+            await APIClient.Instance.TrackEvent(
+                SessionManager.Instance.SessionId, "chat_message", productId);
+            Debug.Log($"[Event] chat_message: {productId}");
+        }
     }
 }

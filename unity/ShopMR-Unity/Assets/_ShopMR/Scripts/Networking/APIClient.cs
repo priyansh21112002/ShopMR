@@ -13,7 +13,7 @@ namespace ShopMR.Networking
 
         [Header("Backend Configuration")]
         [Tooltip("Default backend URL. Can be overridden at runtime via debug menu.")]
-        [SerializeField] private string defaultBaseUrl = "http://10.181.182.134:8000";
+        [SerializeField] private string defaultBaseUrl = "http://10.131.220.134:8000";
 
         private const string PREF_KEY_BASE_URL = "ShopMR_BaseUrl";
         public string BaseUrl { get; private set; }

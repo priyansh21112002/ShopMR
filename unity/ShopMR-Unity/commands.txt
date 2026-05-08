@@ -1,0 +1,49 @@
+# ShopMR — Important Commands
+# ============================================
+
+# ─── Backend ────────────────────────────────
+cd /Users/priyanshsrivastava/Documents/ShopMR/backend
+docker-compose up -d
+docker-compose down
+docker-compose logs -f backend
+docker exec shopmr-backend python -m scripts.seed_products
+docker exec shopmr-backend python -m scripts.index_products
+docker exec shopmr-backend python -m scripts.simulate_users
+docker exec shopmr-backend python -m scripts.ab_analysis
+
+# ─── Access Points ──────────────────────────
+# API Docs:      http://localhost:8000/docs
+# Dashboard:     http://localhost:8501
+# Health Check:  http://localhost:8000/health
+
+# ─── ADB ────────────────────────────────────
+adb devices
+adb install -r build2.apk
+adb uninstall com.DefaultCompany.ShopMR
+adb logcat -s Unity
+adb logcat | grep -i "shopmr\|chatpanel\|catalog\|furniture"
+
+# ─── Test LLM from Terminal ─────────────────
+# 1. Health check
+curl -s http://localhost:8000/health
+
+# 2. Start session
+curl -s -X POST http://localhost:8000/api/sessions/start \
+  -H "Content-Type: application/json" \
+  -d '{"device_id": "test"}' | python3 -m json.tool
+
+# 3. Chat (replace SESSION_ID)
+curl -s -X POST http://localhost:8000/api/chat/message \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "SESSION_ID", "message": "Hi", "conversation_history": []}' \
+  | python3 -m json.tool
+
+# 4. List products
+curl -s http://localhost:8000/api/products/ | python3 -m json.tool
+
+# ─── Check Mac IP (must match APIClient.cs) ─
+ifconfig en0 | grep "inet "
+
+# ─── Controls ───────────────────────────────
+# Editor:  Tab=Catalog, T=Chat, Space=Place, Esc=Cancel, Q/E=Rotate, Del=Remove
+# Quest:   A=Catalog, RightGrip=Chat, Trigger=Place, B=Cancel, Thumbstick=Rotate

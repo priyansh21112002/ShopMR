@@ -1,0 +1,124 @@
+# ShopMR — Important Commands
+# ============================================
+
+# ─── Backend (Docker) ───────────────────────
+cd backend/
+docker-compose up -d                                                    # Start all services (PostgreSQL, FastAPI, MLflow, Dashboard)
+docker-compose down                                                     # Stop all services
+docker-compose logs -f backend                                          # Follow backend logs
+docker exec shopmr-backend python -m scripts.seed_products              # Seed 20 products into DB
+docker exec shopmr-backend python -m scripts.index_products             # Generate embeddings → Pinecone
+docker exec shopmr-backend python -m scripts.simulate_users             # Generate 300 A/B test sessions
+docker exec shopmr-backend python -m scripts.ab_analysis                # Run A/B statistical analysis + MLflow log
+docker exec shopmr-backend python -m scripts.update_model_urls          # Update product model_url paths
+
+# ─── Access Points ──────────────────────────
+# API Docs:      http://localhost:8000/docs
+# Dashboard:     http://localhost:8501
+# MLflow:        http://localhost:5050
+# Health Check:  http://localhost:8000/health
+
+# ─── Unity Build (Quest 3 APK) ─────────────
+# Open Unity 6000.0.47f1
+# File > Build Settings > Android > Build
+# Or via CLI:
+/Applications/Unity/Hub/Editor/6000.0.47f1/Unity.app/Contents/MacOS/Unity \
+  -batchmode -nographics -quit \
+  -projectPath /Users/priyanshsrivastava/Documents/ShopMR/unity/ShopMR-Unity \
+  -executeMethod UnityEditor.BuildPlayerWindow.BuildPlayerAndRun \
+  -buildTarget Android
+
+# ─── ADB (Deploy to Quest) ─────────────────
+adb devices                                                             # List connected Quest headsets
+adb install -r build2.apk                                               # Install APK to Quest
+adb logcat -s Unity                                                     # Stream Unity logs from Quest
+adb logcat | grep -i "shopmr\|chatpanel\|catalog\|furniture"            # Filter ShopMR-specific logs
+adb shell am start -n com.DefaultCompany.ShopMR/com.unity3d.player.UnityPlayerActivity  # Launch app
+
+# ─── Unity Editor Shortcuts ─────────────────
+# Tab          → Toggle Catalog Panel
+# T            → Toggle Chat Panel
+# 1-9          → Select product card (when catalog open)
+# Space/Click  → Confirm furniture placement
+# Escape       → Cancel placement
+# Q/E          → Rotate furniture ghost
+# Delete       → Remove last placed furniture
+# F1           → Debug menu
+
+# ─── Quest Controller Mapping ───────────────
+# A button (right)     → Toggle Catalog
+# Right grip           → Toggle Chat
+# Right trigger        → Confirm placement
+# B button (right)     → Cancel placement / Remove last placed
+# Right thumbstick X   → Rotate furniture
+
+# ─── Git ────────────────────────────────────
+git add -A && git commit -m "message"                                   # Commit all changes
+git push origin main                                                    # Push (triggers CI/CD deploy)
+
+# ─── Backend API Testing (curl) ─────────────
+curl http://localhost:8000/health                                        # Health check
+curl http://localhost:8000/api/products/ | python3 -m json.tool          # List all products
+curl -X POST http://localhost:8000/api/sessions/start \
+  -H "Content-Type: application/json" \
+  -d '{"device_id": "test-device"}' | python3 -m json.tool              # Start session
+
+curl -X POST http://localhost:8000/api/chat/message \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "SESSION_ID", "message": "How many products do you have?", "conversation_history": []}' \
+  | python3 -m json.tool                                                # Test chat
+
+# ─── LLM Chat Agent (Backend) ───────────────
+# The LLM agent uses Groq LLaMA-3.3-70B with 4 tools:
+#   1. search_products    → Semantic search via Pinecone (triggered by "show me", "find", "looking for")
+#   2. get_product_details → DB lookup (triggered by "tell me about", "details", "price")
+#   3. get_recommendations → Full reco engine (triggered by "recommend", "suggest", "what else")
+#   4. analyze_room       → Room context + suggestions (triggered by "fit", "room", "space")
+#
+# Test chat endpoint:
+curl -X POST http://localhost:8000/api/chat/message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "SESSION_ID",
+    "message": "How many products do you have?",
+    "conversation_history": []
+  }' | python3 -m json.tool
+
+# Chat with product context (how Unity sends it):
+curl -X POST http://localhost:8000/api/chat/message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "SESSION_ID",
+    "message": "Show me sofas under $1000",
+    "conversation_history": [
+      {"role": "system", "content": "[SYSTEM CONTEXT] Total products: 20, Categories: sofa, chair, table, lamp, shelf, bed, desk, decor"},
+      {"role": "user", "content": "Show me sofas under $1000"}
+    ]
+  }' | python3 -m json.tool
+
+# Chat response fields:
+#   response            → LLM text reply (2-4 sentences)
+#   products_mentioned  → Array of product IDs mentioned (used by Unity for auto-placement)
+#   tool_used           → Which tool the agent invoked (search_products, get_product_details, etc.)
+
+# ─── LLM Configuration (backend/.env) ──────
+# GROQ_API_KEY=gsk_qc57...
+# GROQ_MODEL=llama-3.3-70b-versatile
+# EMBEDDING_MODEL=all-MiniLM-L6-v2
+# EMBEDDING_DIMENSION=384
+# PINECONE_API_KEY=pcsk_5qcs...
+# PINECONE_INDEX_NAME=shopmr-products
+
+# ─── LLM-Triggered Placement (Unity side) ──
+# When the LLM responds with products_mentioned + placement intent keywords:
+#   "place", "placing", "keep", "keeping", "add to room", "try it", "put it", etc.
+# Unity auto-triggers FurniturePlacer.BeginPlacement() for the first mentioned product.
+# The system context injected by ChatPanelController includes:
+#   - Full product list (20 items with names, categories, prices, IDs)
+#   - Currently placed items in user's room
+#   - Instruction to use exact data and confirm placement intent
+
+# ─── Unity Editor Scripts (run via menu or execute_script) ───
+# Assets/Editor/Coplay/CopyCatalogSizeToChatCanvas.cs   → Sync ChatCanvas size to CatalogCanvas
+# Assets/Editor/Coplay/ReconnectChatScrollbar.cs         → Reconnect scrollbar if reference lost
+# Assets/Editor/Coplay/FixChatSpacingOnly.cs             → Set message spacing to 16 + padding
