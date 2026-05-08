@@ -92,13 +92,6 @@ ShopMR/
 | GET | `/api/dashboard/funnel` | Conversion funnel |
 | GET | `/api/dashboard/ab-results` | A/B test statistics |
 
-## Status
-
-✅ Unity MR client complete — passthrough, hand tracking, furniture placement, chat UI  
-✅ Backend API live — sessions, events, recommendations, chat  
-✅ A/B testing engine with simulated data and statistical validation  
-✅ Streamlit dashboard + MLflow tracking  
-🚧 Performance optimization for LLM responses (non-critical)
 
 ## License
 
